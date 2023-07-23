@@ -48,6 +48,13 @@ struct Swap {
     t: f32,
 }
 
+struct Fall {
+    cx: usize,
+    cy: usize,
+    d: f32,
+    v: f32,
+}
+
 fn window_conf() -> Conf {
     Conf {
         window_title: "Match-3 game".to_owned(),
@@ -98,6 +105,7 @@ async fn main() {
     let mut board = make_board();
     let mut drag: Option<(usize, usize)> = None;
     let mut swap: Option<Swap> = None;
+    let mut falls: Vec<Fall> = Vec::new();
     let mut check_matches = false;
 
     loop {
@@ -151,7 +159,6 @@ async fn main() {
                     found_match = true;
                 }
             }
-            let mut fell = false;
             if found_match {
                 for cx in 0..GRID_W {
                     let mut cy = GRID_H - 1;
@@ -159,11 +166,13 @@ async fn main() {
                     loop {
                         if board[cx][cy].matched {
                             if cy == 0 {
+                                let d = floor as f32 * TILE_H;
                                 for cy in (0..floor).rev() {
                                     board[cx][cy].color = random_color();
                                     board[cx][cy].matched = false;
+                                    board[cx][cy].settled = false;
+                                    falls.push(Fall { cx, cy, d, v: 0.0 });
                                 }
-                                fell = true;
                                 break;
                             }
                             cy -= 1;
@@ -177,16 +186,22 @@ async fn main() {
                             } else {
                                 board[cx][floor - 1].color = board[cx][cy].color;
                                 board[cx][floor - 1].matched = false;
+                                board[cx][floor - 1].settled = false;
+                                falls.push(Fall {
+                                    cx,
+                                    cy: floor - 1,
+                                    d: TILE_H * (floor - 1 - cy) as f32,
+                                    v: 0.0,
+                                });
                                 floor -= 1;
                                 board[cx][cy].matched = true;
-                                fell = true;
                             }
                         }
                     }
                 }
             }
-            check_matches = fell;
         }
+        check_matches = false;
 
         let can_act = swap.is_none();
         if drag.is_none() && is_mouse_button_pressed(MouseButton::Left) {
@@ -227,6 +242,19 @@ async fn main() {
             }
         }
 
+        for ref mut f in &mut falls {
+            if board[f.cx][f.cy].settled {
+                println!("error error");
+                f.d = 0.0;
+            }
+            f.d -= 2.5;
+            if f.d <= 0.0 {
+                board[f.cx][f.cy].settled = true;
+                check_matches = true;
+            }
+        }
+        falls.retain(|ref f| f.d > 0.0);
+
         clear_background(BLACK);
         for cx in 0..GRID_W {
             for cy in 0..GRID_H {
@@ -236,6 +264,12 @@ async fn main() {
                     draw_single_tile(tx, ty, board[cx][cy].color);
                 }
             }
+        }
+
+        for ref f in &falls {
+            let tx = f.cx as f32 * TILE_W;
+            let ty = f.cy as f32 * TILE_H - f.d;
+            draw_single_tile(tx, ty, board[f.cx][f.cy].color);
         }
 
         if let Some(ref sw) = swap {
