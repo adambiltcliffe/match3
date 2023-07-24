@@ -112,10 +112,10 @@ async fn main() {
         if check_matches {
             let mut found_match = false;
             for cy in 0..GRID_H {
-                let mut color = board[0][cy].color;
-                let mut run = 1;
-                for cx in 1..GRID_W {
-                    if board[cx][cy].color == color {
+                let mut color: Option<TileColor> = None;
+                let mut run = 0;
+                for cx in 0..GRID_W {
+                    if board[cx][cy].settled && color == Some(board[cx][cy].color) {
                         run += 1;
                     } else {
                         if run > 2 {
@@ -124,8 +124,13 @@ async fn main() {
                             }
                             found_match = true;
                         }
-                        color = board[cx][cy].color;
-                        run = 1;
+                        if board[cx][cy].settled {
+                            color = Some(board[cx][cy].color);
+                            run = 1;
+                        } else {
+                            color = None;
+                            run = 0;
+                        }
                     }
                 }
                 if run > 2 {
@@ -136,10 +141,10 @@ async fn main() {
                 }
             }
             for cx in 0..GRID_W {
-                let mut color = board[cx][0].color;
-                let mut run = 1;
-                for cy in 1..GRID_H {
-                    if board[cx][cy].color == color {
+                let mut color: Option<TileColor> = None;
+                let mut run = 0;
+                for cy in 0..GRID_H {
+                    if board[cx][cy].settled && color == Some(board[cx][cy].color) {
                         run += 1;
                     } else {
                         if run > 2 {
@@ -148,8 +153,13 @@ async fn main() {
                             }
                             found_match = true;
                         }
-                        color = board[cx][cy].color;
-                        run = 1;
+                        if board[cx][cy].settled {
+                            color = Some(board[cx][cy].color);
+                            run = 1;
+                        } else {
+                            color = None;
+                            run = 0;
+                        }
                     }
                 }
                 if run > 2 {
@@ -186,13 +196,21 @@ async fn main() {
                             } else {
                                 board[cx][floor - 1].color = board[cx][cy].color;
                                 board[cx][floor - 1].matched = false;
-                                board[cx][floor - 1].settled = false;
-                                falls.push(Fall {
-                                    cx,
-                                    cy: floor - 1,
-                                    d: TILE_H * (floor - 1 - cy) as f32,
-                                    v: 0.0,
-                                });
+                                if !board[cx][floor - 1].settled {
+                                    for ref mut f in &mut falls {
+                                        if f.cx == cx && f.cy == cy {
+                                            f.d += TILE_H * (floor - 1 - cy) as f32;
+                                        }
+                                    }
+                                } else {
+                                    board[cx][floor - 1].settled = false;
+                                    falls.push(Fall {
+                                        cx,
+                                        cy: floor - 1,
+                                        d: TILE_H * (floor - 1 - cy) as f32,
+                                        v: 0.0,
+                                    });
+                                }
                                 floor -= 1;
                                 board[cx][cy].matched = true;
                             }
