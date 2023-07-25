@@ -10,7 +10,7 @@ const TILE_H: f32 = 32.0;
 
 const SWAP_TIME: f32 = 0.15;
 const SWAP_SWERVE: f32 = 8.0;
-const GRAVITY: f32 = 200.0;
+const GRAVITY: f32 = 300.0;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum TileColor {
@@ -80,7 +80,7 @@ fn window_conf() -> Conf {
 }
 
 fn random_color() -> TileColor {
-    TILE_COLORS[macroquad::rand::gen_range(0, 2)]
+    TILE_COLORS[macroquad::rand::gen_range(0, 7)]
 }
 
 fn make_board() -> [[TileState; GRID_H]; GRID_W] {
@@ -88,7 +88,7 @@ fn make_board() -> [[TileState; GRID_H]; GRID_W] {
     let mut board = [[t; GRID_H]; GRID_W];
     for cx in 0..GRID_W {
         for cy in 0..GRID_H {
-            board[cx][cy] = TileState::Settled(TILE_COLORS[((cx * 3) + cy) % 7]);
+            board[cx][cy] = TileState::Settled(TILE_COLORS[macroquad::rand::gen_range(0, 4)]);
         }
     }
     board
@@ -115,7 +115,8 @@ async fn main() {
     let mut board = make_board();
     let mut drag: Option<(usize, usize)> = None;
     let mut swap: Option<Swap> = None;
-    let mut check_matches = false;
+    let mut check_matches = true;
+    let mut falls = 0;
 
     loop {
         if check_matches {
@@ -196,7 +197,7 @@ async fn main() {
         }
         check_matches = false;
 
-        let can_act = swap.is_none();
+        let can_act = swap.is_none() && falls == 0;
         if drag.is_none() && is_mouse_button_pressed(MouseButton::Left) {
             drag = Some(get_mouse_cell());
         }
@@ -244,7 +245,7 @@ async fn main() {
             }
         }
 
-        let mut falls = 0;
+        falls = 0;
         for cx in 0..GRID_W {
             for cy in (0..GRID_H).rev() {
                 if let TileState::Falling { color, d, v } = board[cx][cy] {
@@ -274,7 +275,7 @@ async fn main() {
                 let ty = cy as f32 * TILE_H;
                 if let TileState::Settled(color) = board[cx][cy] {
                     draw_single_tile(tx, ty, color);
-                } else if let TileState::Falling { color, d, v } = board[cx][cy] {
+                } else if let TileState::Falling { color, d, v: _ } = board[cx][cy] {
                     draw_single_tile(tx, ty - d, color);
                 }
             }
