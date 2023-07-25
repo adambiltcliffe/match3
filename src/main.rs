@@ -10,6 +10,7 @@ const TILE_H: f32 = 32.0;
 
 const SWAP_TIME: f32 = 0.15;
 const SWAP_SWERVE: f32 = 8.0;
+const GRAVITY: f32 = 200.0;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum TileColor {
@@ -245,9 +246,16 @@ async fn main() {
 
         let mut falls = 0;
         for cx in 0..GRID_W {
-            for cy in 0..GRID_H {
+            for cy in (0..GRID_H).rev() {
                 if let TileState::Falling { color, d, v } = board[cx][cy] {
-                    let d = d - 2.5;
+                    let mut d = d - v * delta - 0.5 * GRAVITY * delta.powf(2.0);
+                    let mut v = v + delta * GRAVITY;
+                    if cy < GRID_H - 1 {
+                        if let TileState::Falling { d: od, v: ov, .. } = board[cx][cy + 1] {
+                            d = d.max(od);
+                            v = v.min(ov);
+                        }
+                    }
                     if d <= 0.0 {
                         board[cx][cy] = TileState::Settled(color);
                         check_matches = true;
@@ -339,12 +347,17 @@ fn drop_column(column: &mut [TileState; GRID_H]) {
                     TileState::Falling { d, .. } => d + TILE_H * (floor - 1 - cy) as f32,
                     _ => unreachable!(),
                 };
+                let v = match column[cy] {
+                    TileState::Settled(_) => 0.0,
+                    TileState::Falling { v, .. } => v,
+                    _ => unreachable!(),
+                };
                 let color = match column[cy] {
                     TileState::Settled(c) => c,
                     TileState::Falling { color, .. } => color,
                     _ => unreachable!(),
                 };
-                column[floor - 1] = TileState::Falling { color, d, v: 0.0 };
+                column[floor - 1] = TileState::Falling { color, d, v };
                 floor -= 1;
                 column[cy] = TileState::JustMatched(TileColor::Red);
             }
