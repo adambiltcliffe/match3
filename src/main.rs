@@ -35,10 +35,29 @@ const DRAW_COLORS: [Color; 7] = [RED, ORANGE, YELLOW, GREEN, SKYBLUE, BLUE, MAGE
 
 #[derive(Copy, Clone, Debug)]
 enum TileState {
-    Empty,
+    JustMatched(TileColor),
     Settled(TileColor),
     Swapping(TileColor),
     Falling { color: TileColor, d: f32, v: f32 },
+}
+
+impl TileState {
+    fn color(&self) -> TileColor {
+        match self {
+            TileState::JustMatched(c) => *c,
+            TileState::Settled(c) => *c,
+            TileState::Swapping(c) => *c,
+            TileState::Falling { color, .. } => *color,
+        }
+    }
+
+    fn matchable_color(&self) -> Option<TileColor> {
+        match self {
+            TileState::JustMatched(c) => Some(*c),
+            TileState::Settled(c) => Some(*c),
+            _ => None,
+        }
+    }
 }
 
 struct Swap {
@@ -64,7 +83,7 @@ fn random_color() -> TileColor {
 }
 
 fn make_board() -> [[TileState; GRID_H]; GRID_W] {
-    let t = TileState::Empty;
+    let t = TileState::Settled(TileColor::Red);
     let mut board = [[t; GRID_H]; GRID_W];
     for cx in 0..GRID_W {
         for cy in 0..GRID_H {
@@ -81,17 +100,11 @@ fn get_mouse_cell() -> (usize, usize) {
 
 fn draw_single_tile(px: f32, py: f32, c: TileColor) {
     draw_rectangle(px, py, TILE_W, TILE_H, BLACK);
-    /*draw_rectangle(
+    draw_rectangle(
         px + 1.0,
         py + 1.0,
         TILE_W - 2.0,
         TILE_H - 2.0,
-        DRAW_COLORS[c as usize],
-    );*/
-    draw_triangle(
-        vec2(px + 1.0, py + 1.0),
-        vec2(px + 1.0, py + TILE_H - 1.0),
-        vec2(px + TILE_W - 1.0, py + TILE_H - 1.0),
         DRAW_COLORS[c as usize],
     );
 }
@@ -110,32 +123,28 @@ async fn main() {
                 let mut color: Option<TileColor> = None;
                 let mut run = 0;
                 for cx in 0..GRID_W {
-                    match board[cx][cy] {
-                        TileState::Settled(c) if Some(c) == color => {
-                            run += 1;
-                        }
-                        _ => {
-                            if run > 2 {
-                                for dcx in 1..=run {
-                                    // pop!
-                                    board[cx - dcx][cy] = TileState::Empty;
-                                }
-                                found_match = true;
+                    if color.is_some() && board[cx][cy].matchable_color() == color {
+                        run += 1;
+                    } else {
+                        if run > 2 {
+                            for dcx in 1..=run {
+                                // pop!
+                                assert!(board[cx - dcx][cy].matchable_color().is_some());
+                                board[cx - dcx][cy] =
+                                    TileState::JustMatched(board[cx - dcx][cy].color());
                             }
-                            if let TileState::Settled(c) = board[cx][cy] {
-                                color = Some(c);
-                                run = 1;
-                            } else {
-                                color = None;
-                                run = 0;
-                            }
+                            found_match = true;
                         }
+                        color = board[cx][cy].matchable_color();
+                        run = if color.is_some() { 1 } else { 0 };
                     }
                 }
                 if run > 2 {
                     for dcx in 1..=run {
                         // pop!
-                        board[GRID_W - dcx][cy] = TileState::Empty;
+                        assert!(board[GRID_W - dcx][cy].matchable_color().is_some());
+                        board[GRID_W - dcx][cy] =
+                            TileState::JustMatched(board[GRID_W - dcx][cy].color());
                     }
                     found_match = true;
                 }
@@ -144,28 +153,28 @@ async fn main() {
                 let mut color: Option<TileColor> = None;
                 let mut run = 0;
                 for cy in 0..GRID_H {
-                    match board[cx][cy] {
-                        TileState::Settled(c) if Some(c) == color => run += 1,
-                        _ => {
-                            if run > 2 {
-                                for dcy in 1..=run {
-                                    board[cx][cy - dcy] = TileState::Empty;
-                                }
-                                found_match = true;
+                    if color.is_some() && board[cx][cy].matchable_color() == color {
+                        run += 1
+                    } else {
+                        if run > 2 {
+                            for dcy in 1..=run {
+                                // pop!
+                                assert!(board[cx][cy - dcy].matchable_color().is_some());
+                                board[cx][cy - dcy] =
+                                    TileState::JustMatched(board[cx][cy - dcy].color());
                             }
-                            if let TileState::Settled(c) = board[cx][cy] {
-                                color = Some(c);
-                                run = 1;
-                            } else {
-                                color = None;
-                                run = 0;
-                            }
+                            found_match = true;
                         }
+                        color = board[cx][cy].matchable_color();
+                        run = if color.is_some() { 1 } else { 0 };
                     }
                 }
                 if run > 2 {
                     for dcy in 1..=run {
-                        board[cx][GRID_H - dcy] = TileState::Empty;
+                        // pop!
+                        assert!(board[cx][GRID_H - dcy].matchable_color().is_some());
+                        board[cx][GRID_H - dcy] =
+                            TileState::JustMatched(board[cx][GRID_H - dcy].color());
                     }
                     found_match = true;
                 }
@@ -296,7 +305,7 @@ fn drop_column(column: &mut [TileState; GRID_H]) {
     let mut cy = GRID_H - 1;
     let mut floor = GRID_H;
     loop {
-        if let TileState::Empty = column[cy] {
+        if let TileState::JustMatched(_) = column[cy] {
             if cy == 0 {
                 let d = if floor == GRID_H {
                     floor as f32 * TILE_H
@@ -337,7 +346,7 @@ fn drop_column(column: &mut [TileState; GRID_H]) {
                 };
                 column[floor - 1] = TileState::Falling { color, d, v: 0.0 };
                 floor -= 1;
-                column[cy] = TileState::Empty;
+                column[cy] = TileState::JustMatched(TileColor::Red);
             }
         }
     }
@@ -349,7 +358,7 @@ fn validate(column: [TileState; GRID_H]) -> bool {
         let new_d = match column[cy] {
             TileState::Settled(_) => 0.0,
             TileState::Falling { d, .. } => d,
-            TileState::Empty => continue,
+            TileState::JustMatched(_) => continue,
             _ => unreachable!(),
         };
         if new_d < d {
@@ -374,9 +383,9 @@ fn regression1() {
             d: 63.5,
             v: 0.0,
         },
-        TileState::Empty,
-        TileState::Empty,
-        TileState::Empty,
+        TileState::JustMatched(TileColor::Red),
+        TileState::JustMatched(TileColor::Red),
+        TileState::JustMatched(TileColor::Red),
         TileState::Settled(TileColor::Red),
         TileState::Settled(TileColor::Orange),
         TileState::Settled(TileColor::Yellow),
@@ -391,7 +400,7 @@ fn regression1() {
 fn regression2() {
     let mut col = [
         TileState::Settled(TileColor::Magenta),
-        TileState::Empty,
+        TileState::JustMatched(TileColor::Red),
         TileState::Settled(TileColor::Green),
         TileState::Settled(TileColor::Orange),
         TileState::Settled(TileColor::Yellow),
